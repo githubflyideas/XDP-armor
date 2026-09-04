@@ -14,7 +14,6 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/xdpban/xdp-ban/internal/model"
-	"github.com/xdpban/xdp-ban/internal/policy"
 	"github.com/xdpban/xdp-ban/internal/prefixdb"
 	"github.com/xdpban/xdp-ban/internal/web"
 )
@@ -139,12 +138,12 @@ func seed(db *gorm.DB) {
 	if n > 0 {
 		return
 	}
-	// 只播一个 admin。曾经这里播四个账号(admin/approver/operator/viewer),
-	// 是为了让四眼原则有两个可用登录;四眼已移除,多出来的三个账号就只是三组
-	// 写在 README 里的公开口令。角色矩阵(internal/policy)保留不动 ——
-	// admin 本来就持有全部能力,需要分权时在「用户管理」里加账号即可。
-	u := &model.User{Username: "admin", Role: "admin", Active: true, AuthSource: "local",
-		Email: "admin@example.com"}
+	// 只播一个 admin,也只有一个 admin。曾经这里播四个账号
+	// (admin/approver/operator/viewer)配一张角色矩阵,那是为多人分权准备的:
+	// 四眼原则要两个可用登录,矩阵按角色关闭页面。四眼和矩阵都已移除 ——
+	// 矩阵里 admin 本来就持有全部能力,对唯一的账号从没生效过。
+	// 要分权就交给前面的反向代理或独立鉴权层,那一层能同时管住 Web 和邮件审批链接。
+	u := &model.User{Username: "admin", Active: true, Email: "admin@example.com"}
 	_ = u.SetPassword("admin12345")
 	db.Create(u)
 	for _, p := range []struct{ t, l string }{
@@ -154,6 +153,5 @@ func seed(db *gorm.DB) {
 	} {
 		db.Create(&model.ProtectedTarget{Target: p.t, Label: p.l, Active: true})
 	}
-	_ = policy.Roles
 	log.Println("seeded default account admin/admin12345 (change the password!)")
 }

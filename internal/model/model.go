@@ -11,15 +11,18 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// User 是登录账号。
+//
+// 曾经这里还有 Role(角色矩阵)、AuthSource/LDAPDn(为 LDAP 预留)。角色矩阵里
+// admin 持有全部能力,而部署形态就是一个 admin,那张矩阵从没拒绝过谁;LDAP 只有
+// 字段没有实现。两者都已删掉 —— 旧库里残留的列不影响读写(GORM 不删列,插入
+// 时不带这些列,SQLite 用列默认值补上)。
 type User struct {
 	ID           uint   `gorm:"primaryKey"`
 	Username     string `gorm:"uniqueIndex;not null"`
 	Email        string
 	PasswordHash string
-	Role         string `gorm:"not null;default:viewer"`
-	Active       bool   `gorm:"not null;default:true"`
-	AuthSource   string `gorm:"not null;default:local"`
-	LDAPDn       string
+	Active       bool `gorm:"not null;default:true"`
 	LastLoginAt  *time.Time
 	CreatedAt    time.Time
 	UpdatedAt    time.Time

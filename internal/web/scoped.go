@@ -14,7 +14,6 @@ import (
 
 	"github.com/xdpban/xdp-ban/internal/dispatch"
 	"github.com/xdpban/xdp-ban/internal/model"
-	"github.com/xdpban/xdp-ban/internal/policy"
 	"github.com/xdpban/xdp-ban/internal/prefixdb"
 	"github.com/xdpban/xdp-ban/internal/quota"
 )
@@ -24,7 +23,7 @@ func (h *Handler) scopedBanNew(c *gin.Context) {
 	db := prefixdb.Global()
 
 	data := gin.H{
-		"u": u, "nav": policy.NavSections(u.Role),
+		"u": u, "nav": navSections,
 		"usage": h.quota.Usage(),
 	}
 	if db == nil {
@@ -103,7 +102,7 @@ func (h *Handler) scopedPreview(c *gin.Context) {
 
 func (h *Handler) scopedBanCreate(c *gin.Context) {
 	u := h.currentUser(c)
-	nav := policy.NavSections(u.Role)
+	nav := navSections
 	fail := func(code int, msg string) {
 		c.HTML(code, "scoped_new.html", gin.H{
 			"u": u, "nav": nav, "err": msg,
@@ -218,11 +217,9 @@ func (h *Handler) scopedBanList(c *gin.Context) {
 	var bans []model.ScopedBan
 	h.db.Order("created_at desc").Limit(200).Find(&bans)
 	c.HTML(http.StatusOK, "scoped_list.html", gin.H{
-		"u": u, "nav": policy.NavSections(u.Role), "bans": bans,
-		"usage":      h.quota.Usage(),
-		"canCreate":  policy.Allow(u.Role, policy.BanRequestCreate),
-		"canApprove": policy.Allow(u.Role, policy.BanRequestApprove),
-		"csrf":       h.csrfTokenFor(c),
+		"u": u, "nav": navSections, "bans": bans,
+		"usage": h.quota.Usage(),
+		"csrf":  h.csrfTokenFor(c),
 	})
 }
 

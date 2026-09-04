@@ -10,8 +10,8 @@ import (
 // 图标必须从二进制里出来,不依赖进程工作目录下有没有 favicon.ico。
 // 这个路由在 auth 组外,不需要登录也不需要 CSRF token。
 func TestFavicon_ServedFromBinaryWithoutLogin(t *testing.T) {
-	db := newUsersTestDB(t)
-	r := newUsersRouter(t, db)
+	db := newWebTestDB(t)
+	r := newWebRouter(t, db)
 
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/favicon.ico", nil))

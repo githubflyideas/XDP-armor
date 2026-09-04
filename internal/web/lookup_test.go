@@ -46,7 +46,7 @@ func newLookupRouter(t *testing.T, db *gorm.DB, rv *fakeRevoker) *gin.Engine {
 
 func TestLookupSearch_FindsActiveGlobalBan(t *testing.T) {
 	db := newLookupTestDB(t)
-	mkUser(t, db, "admin", "admin", true)
+	mkUser(t, db, "admin", true)
 	r := newLookupRouter(t, db, &fakeRevoker{})
 	sid := loginAs(t, r, "admin")
 
@@ -73,7 +73,7 @@ func TestLookupSearch_FindsActiveGlobalBan(t *testing.T) {
 
 func TestLookupSearch_FindsActiveScopedBanByResolvedCIDR(t *testing.T) {
 	db := newLookupTestDB(t)
-	mkUser(t, db, "admin", "admin", true)
+	mkUser(t, db, "admin", true)
 	r := newLookupRouter(t, db, &fakeRevoker{})
 	sid := loginAs(t, r, "admin")
 
@@ -99,7 +99,7 @@ func TestLookupSearch_FindsActiveScopedBanByResolvedCIDR(t *testing.T) {
 
 func TestLookupSearch_CleanIPReturnsNoMatch(t *testing.T) {
 	db := newLookupTestDB(t)
-	mkUser(t, db, "admin", "admin", true)
+	mkUser(t, db, "admin", true)
 	r := newLookupRouter(t, db, &fakeRevoker{})
 	sid := loginAs(t, r, "admin")
 
@@ -114,7 +114,7 @@ func TestLookupSearch_CleanIPReturnsNoMatch(t *testing.T) {
 
 func TestLookupRollback_ActiveGlobalBanCallsRevokeGlobalAndTransitionsState(t *testing.T) {
 	db := newLookupTestDB(t)
-	mkUser(t, db, "admin", "admin", true)
+	mkUser(t, db, "admin", true)
 	rv := &fakeRevoker{}
 	r := newLookupRouter(t, db, rv)
 	sid := loginAs(t, r, "admin")
@@ -143,10 +143,12 @@ func TestLookupRollback_ActiveGlobalBanCallsRevokeGlobalAndTransitionsState(t *t
 	}
 }
 
-func TestLookupRollback_IsCapabilityGated(t *testing.T) {
+// 回滚曾经挂 requireCap(UnbanExecute),viewer 会拿到 403。角色矩阵移除后,
+// 唯一的闸门是"登录了没有" —— 这里改成钉住这条:没会话的回滚请求必须被挡在门外
+// 且不改状态。真要分权,交给前面的反向代理。
+func TestLookupRollback_RequiresLogin(t *testing.T) {
 	db := newLookupTestDB(t)
-	mkUser(t, db, "admin", "admin", true)
-	mkUser(t, db, "viewer1", "viewer", true)
+	mkUser(t, db, "admin", true)
 	r := newLookupRouter(t, db, &fakeRevoker{})
 
 	req := model.BanRequest{
@@ -154,22 +156,22 @@ func TestLookupRollback_IsCapabilityGated(t *testing.T) {
 	}
 	db.Create(&req)
 
-	sid := loginAs(t, r, "viewer1")
-	w := postAs(t, r, sid, "/lookup/ban/"+itoa(req.ID)+"/rollback", nil)
-	if w.Code != http.StatusForbidden {
-		t.Errorf("viewer 角色回滚状态码 = %d, 期望 403", w.Code)
+	w := postAs(t, r, "no-such-session", "/lookup/ban/"+itoa(req.ID)+"/rollback", nil)
+	if w.Code != http.StatusFound || w.Header().Get("Location") != "/login" {
+		t.Errorf("未登录回滚 = %d Location=%q, 期望 302 → /login",
+			w.Code, w.Header().Get("Location"))
 	}
 
 	var reloaded model.BanRequest
 	db.First(&reloaded, req.ID)
 	if reloaded.State != "active" {
-		t.Errorf("无权限的回滚请求不应改变状态,实际 = %q", reloaded.State)
+		t.Errorf("未登录的回滚请求不应改变状态,实际 = %q", reloaded.State)
 	}
 }
 
 func TestLookupRollback_PendingBanIsRejectedNotRevoked(t *testing.T) {
 	db := newLookupTestDB(t)
-	mkUser(t, db, "admin", "admin", true)
+	mkUser(t, db, "admin", true)
 	rv := &fakeRevoker{}
 	r := newLookupRouter(t, db, rv)
 	sid := loginAs(t, r, "admin")
@@ -196,7 +198,7 @@ func TestLookupRollback_PendingBanIsRejectedNotRevoked(t *testing.T) {
 
 func TestLookupRollback_ActiveScopedGlobalBanRevokesAllResolvedPrefixes(t *testing.T) {
 	db := newLookupTestDB(t)
-	mkUser(t, db, "admin", "admin", true)
+	mkUser(t, db, "admin", true)
 	rv := &fakeRevoker{}
 	r := newLookupRouter(t, db, rv)
 	sid := loginAs(t, r, "admin")

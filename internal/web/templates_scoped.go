@@ -197,7 +197,7 @@ const scopedListTpl = `<!doctype html><html><head><meta charset="utf-8"><title>�
 {{end}}
 </div></div>
 
-{{if .canCreate}}<p><a class="btn primary" href="/scoped/new">新建范围封禁</a></p>{{end}}
+<p><a class="btn primary" href="/scoped/new">新建范围封禁</a></p>
 
 <div class="card"><table><thead><tr>
 <th>目标主机</th><th>源范围</th><th>表项</th><th>覆盖地址</th><th>状态</th><th>提交时间</th><th></th>
@@ -211,7 +211,7 @@ const scopedListTpl = `<!doctype html><html><head><meta charset="utf-8"><title>�
 <td><span class="st {{if eq .State "active"}}ok{{else if eq .State "pending"}}warn{{else}}mut{{end}}">{{.State}}</span></td>
 <td>{{.CreatedAt.Format "01-02 15:04"}}</td>
 <td>
-{{if and $.canApprove (eq .State "pending")}}
+{{if eq .State "pending"}}
 <form method="post" action="/scoped/{{.ID}}/approve" style="display:inline"><input type="hidden" name="csrf_token" value="{{$.csrf}}"><button class="btn primary">批准</button></form>
 <form method="post" action="/scoped/{{.ID}}/reject" style="display:inline"><input type="hidden" name="csrf_token" value="{{$.csrf}}"><button class="btn danger">驳回</button></form>{{end}}
 {{if eq .State "active"}}

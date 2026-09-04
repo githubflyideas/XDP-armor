@@ -12,7 +12,6 @@ import (
 
 	"github.com/xdpban/xdp-ban/internal/approval"
 	"github.com/xdpban/xdp-ban/internal/model"
-	"github.com/xdpban/xdp-ban/internal/policy"
 	"github.com/xdpban/xdp-ban/internal/quota"
 )
 
@@ -67,43 +66,39 @@ func Register(r *gin.Engine, db *gorm.DB, revoker Revoker) *Handler {
 	{
 		auth.GET("/", h.dashboard)
 		auth.GET("/dashboard", h.dashboard)
-		auth.GET("/bans", h.requireCap(policy.BanRequestView), h.bansList)
-		auth.GET("/bans/new", h.requireCap(policy.BanRequestCreate), h.banNew)
-		auth.POST("/bans", h.requireCap(policy.BanRequestCreate), h.banCreate)
-		auth.POST("/bans/:id/approve", h.requireCap(policy.BanRequestApprove), h.banApprove)
-		auth.POST("/bans/:id/reject", h.requireCap(policy.BanRequestReject), h.banReject)
-		auth.GET("/bans/:id", h.requireCap(policy.BanRequestView), h.banDetail)
+		auth.GET("/bans", h.bansList)
+		auth.GET("/bans/new", h.banNew)
+		auth.POST("/bans", h.banCreate)
+		auth.POST("/bans/:id/approve", h.banApprove)
+		auth.POST("/bans/:id/reject", h.banReject)
+		auth.GET("/bans/:id", h.banDetail)
 
-		auth.GET("/lookup", h.requireCap(policy.BanRequestView), h.lookupPage)
-		auth.POST("/lookup", h.requireCap(policy.BanRequestView), h.lookupSearch)
-		auth.POST("/lookup/:kind/:id/rollback", h.requireCap(policy.UnbanExecute), h.lookupRollback)
+		auth.GET("/lookup", h.lookupPage)
+		auth.POST("/lookup", h.lookupSearch)
+		auth.POST("/lookup/:kind/:id/rollback", h.lookupRollback)
 
-		auth.GET("/scoped", h.requireCap(policy.BanRequestView), h.scopedBanList)
-		auth.GET("/scoped/new", h.requireCap(policy.BanRequestCreate), h.scopedBanNew)
-		auth.POST("/scoped", h.requireCap(policy.BanRequestCreate), h.scopedBanCreate)
-		auth.GET("/scoped/asn-search", h.requireCap(policy.BanRequestCreate), h.scopedASNSearch)
-		auth.POST("/scoped/preview", h.requireCap(policy.BanRequestCreate), h.scopedPreview)
-		auth.POST("/scoped/:id/approve", h.requireCap(policy.BanRequestApprove), h.scopedBanApprove)
-		auth.POST("/scoped/:id/reject", h.requireCap(policy.BanRequestReject), h.scopedBanReject)
-		auth.POST("/scoped/:id/revoke", h.requireCap(policy.UnbanExecute), h.scopedBanRevoke)
+		auth.GET("/scoped", h.scopedBanList)
+		auth.GET("/scoped/new", h.scopedBanNew)
+		auth.POST("/scoped", h.scopedBanCreate)
+		auth.GET("/scoped/asn-search", h.scopedASNSearch)
+		auth.POST("/scoped/preview", h.scopedPreview)
+		auth.POST("/scoped/:id/approve", h.scopedBanApprove)
+		auth.POST("/scoped/:id/reject", h.scopedBanReject)
+		auth.POST("/scoped/:id/revoke", h.scopedBanRevoke)
 
-		auth.GET("/users", h.requireCap(policy.UserManage), h.usersList)
-		auth.POST("/users", h.requireCap(policy.UserManage), h.userCreate)
-		auth.POST("/users/:id/password", h.requireCap(policy.UserManage), h.userChangePassword)
-		auth.POST("/users/:id/role", h.requireCap(policy.UserManage), h.userChangeRole)
-		auth.POST("/users/:id/toggle", h.requireCap(policy.UserManage), h.userToggleActive)
-		auth.POST("/users/:id/delete", h.requireCap(policy.UserManage), h.userDelete)
+		auth.GET("/account", h.accountPage)
+		auth.POST("/account/password", h.accountChangePassword)
 
-		auth.GET("/prefixdb", h.requireCap(policy.SystemConfig), h.prefixDBPage)
-		auth.POST("/prefixdb/sync", h.requireCap(policy.SystemConfig), h.prefixDBSync)
-		auth.GET("/prefixdb/status", h.requireCap(policy.SystemConfig), h.prefixDBStatus)
-		auth.POST("/prefixdb/upload", h.requireCap(policy.SystemConfig), h.prefixDBUpload)
-		auth.POST("/prefixdb/overrides", h.requireCap(policy.SystemConfig), h.prefixDBSaveOverride)
+		auth.GET("/prefixdb", h.prefixDBPage)
+		auth.POST("/prefixdb/sync", h.prefixDBSync)
+		auth.GET("/prefixdb/status", h.prefixDBStatus)
+		auth.POST("/prefixdb/upload", h.prefixDBUpload)
+		auth.POST("/prefixdb/overrides", h.prefixDBSaveOverride)
 
-		auth.GET("/audit", h.requireCap(policy.AuditView), h.auditLog)
+		auth.GET("/audit", h.auditLog)
 
-		auth.GET("/report", h.requireCap(policy.AuditView), h.reportPage)
-		auth.GET("/report/export", h.requireCap(policy.AuditView), h.reportExport)
+		auth.GET("/report", h.reportPage)
+		auth.GET("/report/export", h.reportExport)
 	}
 
 	return h
@@ -141,16 +136,6 @@ func (h *Handler) requireLogin(c *gin.Context) {
 	}
 }
 
-func (h *Handler) requireCap(cap policy.Capability) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		u := h.currentUser(c)
-		if u == nil || !policy.Allow(u.Role, cap) {
-			c.HTML(http.StatusForbidden, "error.html", gin.H{"msg": "无权限执行此操作"})
-			c.Abort()
-		}
-	}
-}
-
 func (h *Handler) loginPage(c *gin.Context) {
 	c.HTML(http.StatusOK, "login.html", gin.H{})
 }
@@ -158,7 +143,7 @@ func (h *Handler) loginPage(c *gin.Context) {
 func (h *Handler) doLogin(c *gin.Context) {
 	var u model.User
 	err := h.db.Where("username = ? AND active = ?", c.PostForm("username"), true).First(&u).Error
-	if err != nil || u.AuthSource != "local" || !u.CheckPassword(c.PostForm("password")) {
+	if err != nil || !u.CheckPassword(c.PostForm("password")) {
 		c.HTML(http.StatusUnauthorized, "login.html", gin.H{"err": "用户名或密码错误,或账号已停用"})
 		return
 	}
@@ -191,9 +176,8 @@ func (h *Handler) dashboard(c *gin.Context) {
 		Where("event = ? AND occurred_at >= ?", "drift_detected", time.Now().Add(-24*time.Hour)).
 		Count(&driftCount)
 	c.HTML(http.StatusOK, "dashboard.html", gin.H{
-		"u": u, "nav": policy.NavSections(u.Role),
+		"u": u, "nav": navSections,
 		"pending": pending, "active": active, "failed": failed, "driftCount": driftCount,
-		"canCreate": policy.Allow(u.Role, policy.BanRequestCreate),
 	})
 }
 
@@ -202,10 +186,8 @@ func (h *Handler) bansList(c *gin.Context) {
 	var reqs []model.BanRequest
 	h.db.Order("created_at desc").Limit(200).Find(&reqs)
 	c.HTML(http.StatusOK, "bans.html", gin.H{
-		"u": u, "nav": policy.NavSections(u.Role), "reqs": reqs,
-		"canCreate":  policy.Allow(u.Role, policy.BanRequestCreate),
-		"canApprove": policy.Allow(u.Role, policy.BanRequestApprove),
-		"csrf":       h.csrfTokenFor(c),
+		"u": u, "nav": navSections, "reqs": reqs,
+		"csrf": h.csrfTokenFor(c),
 	})
 }
 
@@ -213,7 +195,7 @@ func (h *Handler) banNew(c *gin.Context) {
 	u := h.currentUser(c)
 
 	c.HTML(http.StatusOK, "ban_new.html", gin.H{
-		"u": u, "nav": policy.NavSections(u.Role),
+		"u": u, "nav": navSections,
 		"target": strings.TrimSpace(c.Query("target")),
 		"reason": strings.TrimSpace(c.Query("reason")),
 		"csrf":   h.csrfTokenFor(c),
@@ -223,7 +205,7 @@ func (h *Handler) banNew(c *gin.Context) {
 func (h *Handler) banCreate(c *gin.Context) {
 	u := h.currentUser(c)
 	target := strings.TrimSpace(c.PostForm("target"))
-	nav := policy.NavSections(u.Role)
+	nav := navSections
 
 	if target == "" {
 		c.HTML(http.StatusBadRequest, "ban_new.html", gin.H{"u": u, "nav": nav, "err": "目标不能为空"})
@@ -363,9 +345,9 @@ func (h *Handler) banDetail(c *gin.Context) {
 		h.db.First(&approver, *req.ApprovedByID)
 	}
 	c.HTML(http.StatusOK, "ban_detail.html", gin.H{
-		"u": u, "nav": policy.NavSections(u.Role),
+		"u": u, "nav": navSections,
 		"req": req, "approver": approver,
-		"canApprove": policy.Allow(u.Role, policy.BanRequestApprove) && req.State == "pending",
+		"canApprove": req.State == "pending",
 		"csrf":       h.csrfTokenFor(c),
 	})
 }
@@ -375,7 +357,7 @@ func (h *Handler) auditLog(c *gin.Context) {
 	var logs []model.AuditLog
 	h.db.Order("occurred_at desc").Limit(500).Find(&logs)
 	c.HTML(http.StatusOK, "audit.html", gin.H{
-		"u": u, "nav": policy.NavSections(u.Role), "logs": logs,
+		"u": u, "nav": navSections, "logs": logs,
 	})
 }
 

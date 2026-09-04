@@ -10,9 +10,9 @@ import (
 
 func TestScopedBanApprove_ConcurrentApprovalsOnlyOneWins(t *testing.T) {
 	db := newScopedTestDB(t)
-	requester := mkUser(t, db, "requester", "operator", true)
-	mkUser(t, db, "approver1", "approver", true)
-	mkUser(t, db, "approver2", "approver", true)
+	requester := mkUser(t, db, "requester", true)
+	mkUser(t, db, "approver1", true)
+	mkUser(t, db, "approver2", true)
 
 	setTestPrefixDB(t, map[string][]string{"XX": {"198.51.100.0/24"}})
 

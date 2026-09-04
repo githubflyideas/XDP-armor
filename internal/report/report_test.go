@@ -34,8 +34,8 @@ func newTestDB(t *testing.T) *gorm.DB {
 func seedReportData(t *testing.T, db *gorm.DB) (from, to time.Time) {
 	t.Helper()
 
-	req := &model.User{Username: "alice", Role: "operator", Active: true}
-	apr := &model.User{Username: "bob", Role: "approver", Active: true}
+	req := &model.User{Username: "alice", Active: true}
+	apr := &model.User{Username: "bob", Active: true}
 	db.Create(req)
 	db.Create(apr)
 
@@ -196,7 +196,7 @@ func TestFormatTTL(t *testing.T) {
 
 func TestBuild_RespectsTimeRange(t *testing.T) {
 	db := newTestDB(t)
-	u := &model.User{Username: "alice", Role: "operator", Active: true}
+	u := &model.User{Username: "alice", Active: true}
 	db.Create(u)
 
 	old := time.Now().Add(-90 * 24 * time.Hour)

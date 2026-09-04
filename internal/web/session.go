@@ -74,20 +74,6 @@ func (s *sessionStore) DeleteByUser(userID uint) {
 	}
 }
 
-func (s *sessionStore) OnlineUsers() map[uint]bool {
-	now := time.Now()
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	out := make(map[uint]bool, len(s.data))
-	for _, e := range s.data {
-		if now.Before(e.expiresAt) {
-			out[e.userID] = true
-		}
-	}
-	return out
-}
-
 func (s *sessionStore) reaper() {
 	ticker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()

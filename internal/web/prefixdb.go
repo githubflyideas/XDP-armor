@@ -9,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/xdpban/xdp-ban/internal/model"
-	"github.com/xdpban/xdp-ban/internal/policy"
 	"github.com/xdpban/xdp-ban/internal/prefixdb"
 )
 
@@ -19,12 +18,11 @@ func (h *Handler) prefixDBPage(c *gin.Context) {
 	u := h.currentUser(c)
 
 	data := gin.H{
-		"u": u, "nav": policy.NavSections(u.Role),
+		"u": u, "nav": navSections,
 		"sources":      prefixdb.Sources,
 		"syncStatus":   prefixdb.Status(),
 		"dataDir":      prefixdb.DataDir(),
 		"overridePath": prefixdb.OverridePath(),
-		"canManage":    policy.Allow(u.Role, policy.SystemConfig),
 	}
 	if db := prefixdb.Global(); db != nil {
 		data["stats"] = db.Stats()

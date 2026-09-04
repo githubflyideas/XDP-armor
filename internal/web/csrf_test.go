@@ -9,13 +9,14 @@ import (
 )
 
 func TestCSRF_MissingTokenRejected(t *testing.T) {
-	db := newUsersTestDB(t)
-	mkUser(t, db, "admin", "admin", true)
-	r := newUsersRouter(t, db)
+	db := newWebTestDB(t)
+	mkUser(t, db, "admin", true)
+	r := newWebRouter(t, db)
 	sid := loginAs(t, r, "admin")
 
-	req := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(
-		url.Values{"username": {"dave"}, "role": {"operator"}, "password": {"secret12345"}}.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/account/password", strings.NewReader(
+		url.Values{"current": {"password123"}, "password": {"newsecret123"},
+			"confirm": {"newsecret123"}}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(&http.Cookie{Name: "sid", Value: sid})
 	w := httptest.NewRecorder()
@@ -27,13 +28,13 @@ func TestCSRF_MissingTokenRejected(t *testing.T) {
 }
 
 func TestCSRF_WrongTokenRejected(t *testing.T) {
-	db := newUsersTestDB(t)
-	mkUser(t, db, "admin", "admin", true)
-	r := newUsersRouter(t, db)
+	db := newWebTestDB(t)
+	mkUser(t, db, "admin", true)
+	r := newWebRouter(t, db)
 	sid := loginAs(t, r, "admin")
 
-	w := postAs(t, r, sid, "/users", url.Values{
-		"username": {"dave"}, "role": {"operator"}, "password": {"secret12345"},
+	w := postAs(t, r, sid, "/account/password", url.Values{
+		"current": {"password123"}, "password": {"newsecret123"}, "confirm": {"newsecret123"},
 		"csrf_token": {"totally-wrong-token"},
 	})
 	if w.Code != http.StatusForbidden {
@@ -42,31 +43,32 @@ func TestCSRF_WrongTokenRejected(t *testing.T) {
 }
 
 func TestCSRF_CorrectTokenFromSessionPasses(t *testing.T) {
-	db := newUsersTestDB(t)
-	mkUser(t, db, "admin", "admin", true)
-	r := newUsersRouter(t, db)
+	db := newWebTestDB(t)
+	mkUser(t, db, "admin", true)
+	r := newWebRouter(t, db)
 	sid := loginAs(t, r, "admin")
 
-	body := getAs(t, r, sid, "/users").Body.String()
+	body := getAs(t, r, sid, "/account").Body.String()
 	tok := extractCSRFToken(t, body)
 
-	w := postAs(t, r, sid, "/users", url.Values{
-		"username": {"dave"}, "role": {"operator"}, "password": {"secret12345"},
+	w := postAs(t, r, sid, "/account/password", url.Values{
+		"current": {"password123"}, "password": {"newsecret123"}, "confirm": {"newsecret123"},
 		"csrf_token": {tok},
 	})
-	if w.Code != http.StatusOK {
-		t.Errorf("正确 csrf_token 的 POST 状态码 = %d, 期望 200, body=%s", w.Code, w.Body.String())
+	// 改密成功后吊销全部会话并跳登录页,所以是 302 而不是 200。
+	if w.Code != http.StatusFound {
+		t.Errorf("正确 csrf_token 的 POST 状态码 = %d, 期望 302, body=%s", w.Code, w.Body.String())
 	}
 }
 
 func TestCSRF_GETRoutesUnaffected(t *testing.T) {
-	db := newUsersTestDB(t)
-	mkUser(t, db, "admin", "admin", true)
-	r := newUsersRouter(t, db)
+	db := newWebTestDB(t)
+	mkUser(t, db, "admin", true)
+	r := newWebRouter(t, db)
 	sid := loginAs(t, r, "admin")
 
-	if code := getAs(t, r, sid, "/users").Code; code != http.StatusOK {
-		t.Errorf("GET /users = %d, 期望 200(GET 不受 CSRF 中间件约束)", code)
+	if code := getAs(t, r, sid, "/account").Code; code != http.StatusOK {
+		t.Errorf("GET /account = %d, 期望 200(GET 不受 CSRF 中间件约束)", code)
 	}
 	if code := getAs(t, r, sid, "/dashboard").Code; code != http.StatusOK {
 		t.Errorf("GET /dashboard = %d, 期望 200", code)

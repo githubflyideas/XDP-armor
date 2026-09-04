@@ -37,11 +37,12 @@ func (s *Service) GenTokensAndSend(req *model.BanRequest, requesterID *uint) err
 		return nil
 	}
 
-	// 这里曾经加一条 `id <> requesterID`,把提交人自己从收件人里排掉 —— 那是四眼原则的
-	// 配套动作。四眼移除后这条排除反而会坏事:单人部署只有一个 admin,排掉自己就等于
-	// 一个审批人都找不到,邮件路径直接静默走进 approval_mail_skipped。
+	// 收件人就是启用中的账号。曾经这里筛 role IN ('admin','approver') 并排掉提交人
+	// 自己 —— 那两条都是四眼原则的配套动作:排掉自己是为了强制第二个人,筛角色是为了
+	// 只发给有审批权的人。四眼和角色都已移除,只剩一个 admin,再筛就等于一个审批人都
+	// 找不到,邮件路径会静默走进 approval_mail_skipped。
 	var approvers []model.User
-	if err := s.db.Where("role IN ? AND active = ?", []string{"admin", "approver"}, true).
+	if err := s.db.Where("active = ?", true).
 		Limit(2).Find(&approvers).Error; err != nil {
 		return fmt.Errorf("查找审批人: %w", err)
 	}

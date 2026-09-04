@@ -11,7 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/xdpban/xdp-ban/internal/model"
-	"github.com/xdpban/xdp-ban/internal/policy"
 	"github.com/xdpban/xdp-ban/internal/prefixdb"
 )
 
@@ -32,14 +31,14 @@ type lookupHit struct {
 func (h *Handler) lookupPage(c *gin.Context) {
 	u := h.currentUser(c)
 	c.HTML(http.StatusOK, "lookup.html", gin.H{
-		"u": u, "nav": policy.NavSections(u.Role),
+		"u": u, "nav": navSections,
 		"csrf": h.csrfTokenFor(c),
 	})
 }
 
 func (h *Handler) lookupSearch(c *gin.Context) {
 	u := h.currentUser(c)
-	nav := policy.NavSections(u.Role)
+	nav := navSections
 	raw := strings.TrimSpace(c.PostForm("ip"))
 
 	ip := net.ParseIP(raw)
@@ -62,7 +61,6 @@ func (h *Handler) lookupSearch(c *gin.Context) {
 		return
 	}
 
-	canRollback := policy.Allow(u.Role, policy.UnbanExecute)
 	var hits []lookupHit
 
 	var reqs []model.BanRequest
@@ -83,7 +81,7 @@ func (h *Handler) lookupSearch(c *gin.Context) {
 			hit.ExpiresAt = r.ExpiresAt.Format("2006-01-02 15:04:05")
 		}
 		hit.Enforced = h.dispatchAcked(fmt.Sprintf("ban-%d-%s", r.ID, r.Target))
-		hit.CanRollback = canRollback && (r.State == "active" || r.State == "pending")
+		hit.CanRollback = r.State == "active" || r.State == "pending"
 		hits = append(hits, hit)
 	}
 
@@ -122,7 +120,7 @@ func (h *Handler) lookupSearch(c *gin.Context) {
 			hit.ExpiresAt = sb.ExpiresAt.Format("2006-01-02 15:04:05")
 		}
 		hit.Enforced = h.dispatchAcked(fmt.Sprintf("scoped-%d-%s", sb.ID, sb.TargetIP))
-		hit.CanRollback = canRollback && (sb.State == "active" || sb.State == "pending")
+		hit.CanRollback = sb.State == "active" || sb.State == "pending"
 		hits = append(hits, hit)
 	}
 

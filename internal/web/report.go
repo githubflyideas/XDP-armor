@@ -8,7 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/xdpban/xdp-ban/internal/model"
-	"github.com/xdpban/xdp-ban/internal/policy"
 	"github.com/xdpban/xdp-ban/internal/report"
 )
 
@@ -16,7 +15,7 @@ func (h *Handler) reportPage(c *gin.Context) {
 	u := h.currentUser(c)
 	now := time.Now()
 	c.HTML(http.StatusOK, "report.html", gin.H{
-		"u": u, "nav": policy.NavSections(u.Role),
+		"u": u, "nav": navSections,
 
 		"defaultFrom": firstOfLastMonth(now).Format("2006-01-02"),
 		"defaultTo":   now.Format("2006-01-02"),

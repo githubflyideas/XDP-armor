@@ -19,7 +19,7 @@ XDP-ban is a governed ban tool: submit a ban, approve it as a deliberate second 
 
 ## Features
 
-- **Governed** — two-step approval, role-based access, immutable audit log, one-time email approval links. Built for one person: you can approve your own request.
+- **Governed** — two-step approval, immutable audit log, one-time email approval links. Built for one person: one account, and you can approve your own request.
 - **Escalating bans** — repeat offenders get progressively longer bans, up to permanent.
 - **Scoped bans** — pick source ranges by **country / ASN**, protect a single target host. Impact is previewed and quota-checked before submission.
 - **Pure XDP enforcement** — no nftables, no iptables. The agent writes eBPF maps directly, in **generic (SKB) mode** so it works on any NIC driver, not just the ones with native XDP support.
@@ -77,21 +77,23 @@ sudo ./xdp-ban -iface eth0    # http://localhost:8080 — root needed to attach 
 ### Default account
 
 One account is seeded on first run. **Change the password immediately** — it is
-printed in this README and therefore public.
+printed in this README and therefore public. Change it under **账号 / Account**;
+that revokes every session, including your own.
 
-| Username | Password | Role |
-|---|---|---|
-| `admin` | `admin12345` | admin — everything, incl. user management and system config |
+| Username | Password |
+|---|---|
+| `admin` | `admin12345` |
 
-One account is enough: submitting and approving can be the same person. The
+There is exactly one account, and no user management. Submitting and approving
+can be the same person, so there is nothing for a second role to do. The
 `pending → approve` step is still there, but it exists to give you one chance to
 change your mind and to let the audit log separate "when it was requested" from
 "when it took effect" — not to force a second pair of eyes.
 
-If you do share the tool, add accounts under **Users** (admin only) and pick a
-narrower role: `viewer` (read-only), `operator` (submit only), `approver`
-(approve / reject / revoke). You can also disable and delete users there —
-every change is written to the audit log.
+If you do need to give several people different levels of access, put it in
+front of `xdp-ban` — a reverse proxy or a dedicated auth layer covers both the
+web UI and the email approval links, which a role table inside the app never
+did.
 
 Data lives in a single `xdpban.db` file. Back up = copy the file.
 

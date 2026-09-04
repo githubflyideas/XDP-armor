@@ -105,8 +105,8 @@ func newScopedRouter(t *testing.T, db *gorm.DB, rv *fakeRevoker) *gin.Engine {
 
 func TestScopedBanCreate_GlobalSubmissionEndToEndCreatesOneDispatchPerCIDR(t *testing.T) {
 	db := newScopedTestDB(t)
-	mkUser(t, db, "admin", "admin", true)
-	mkUser(t, db, "approver1", "approver", true)
+	mkUser(t, db, "admin", true)
+	mkUser(t, db, "approver1", true)
 	r := newScopedRouter(t, db, &fakeRevoker{})
 
 	setTestPrefixDB(t, map[string][]string{"XX": {"198.51.100.0/24", "203.0.113.0/24"}})
@@ -151,7 +151,7 @@ func TestScopedBanCreate_GlobalSubmissionEndToEndCreatesOneDispatchPerCIDR(t *te
 
 func TestScopedBanCreate_GlobalSubmissionRejectedWhenOverlapsProtectedTarget(t *testing.T) {
 	db := newScopedTestDB(t)
-	mkUser(t, db, "admin", "admin", true)
+	mkUser(t, db, "admin", true)
 	r := newScopedRouter(t, db, &fakeRevoker{})
 
 	db.Create(&model.ProtectedTarget{Target: "198.51.100.55", Active: true})
@@ -175,7 +175,7 @@ func TestScopedBanCreate_GlobalSubmissionRejectedWhenOverlapsProtectedTarget(t *
 
 func TestScopedPreview_CloudASNSelectorReturnsWarningWithoutBlocking(t *testing.T) {
 	db := newScopedTestDB(t)
-	mkUser(t, db, "admin", "admin", true)
+	mkUser(t, db, "admin", true)
 	r := newScopedRouter(t, db, &fakeRevoker{})
 
 	setTestPrefixASN(t, 16509, "XX", []string{"198.51.100.0/24"})

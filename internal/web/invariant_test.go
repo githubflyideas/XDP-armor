@@ -27,16 +27,16 @@ func TestSelfActionAllowedOnMutatingRoutes(t *testing.T) {
 			name: "banApprove lets the requester approve their own request",
 			want: "active",
 			run: func(t *testing.T) string {
-				db := newUsersTestDB(t)
+				db := newWebTestDB(t)
 				if err := db.AutoMigrate(&model.BanRequest{}, &model.Dispatch{}, &model.ProtectedTarget{}, &model.BanLadder{}); err != nil {
 					t.Fatalf("migrate: %v", err)
 				}
 				db.Exec("DELETE FROM ban_requests")
-				u := mkUser(t, db, "self", "admin", true)
+				u := mkUser(t, db, "self", true)
 				req := model.BanRequest{ActionType: "ban", Target: "203.0.113.1", Source: "manual",
 					State: "pending", RequestedByID: &u.ID, ApprovalMode: "manual_dual"}
 				db.Create(&req)
-				r := newUsersRouter(t, db)
+				r := newWebRouter(t, db)
 				sid := loginAs(t, r, "self")
 				postAs(t, r, sid, "/bans/"+itoa(req.ID)+"/approve", nil)
 
@@ -51,16 +51,16 @@ func TestSelfActionAllowedOnMutatingRoutes(t *testing.T) {
 			name: "banReject lets the requester reject their own request",
 			want: "rejected",
 			run: func(t *testing.T) string {
-				db := newUsersTestDB(t)
+				db := newWebTestDB(t)
 				if err := db.AutoMigrate(&model.BanRequest{}, &model.Dispatch{}); err != nil {
 					t.Fatalf("migrate: %v", err)
 				}
 				db.Exec("DELETE FROM ban_requests")
-				u := mkUser(t, db, "self", "admin", true)
+				u := mkUser(t, db, "self", true)
 				req := model.BanRequest{ActionType: "ban", Target: "203.0.113.2", Source: "manual",
 					State: "pending", RequestedByID: &u.ID, ApprovalMode: "manual_dual"}
 				db.Create(&req)
-				r := newUsersRouter(t, db)
+				r := newWebRouter(t, db)
 				sid := loginAs(t, r, "self")
 				postAs(t, r, sid, "/bans/"+itoa(req.ID)+"/reject", nil)
 
@@ -76,7 +76,7 @@ func TestSelfActionAllowedOnMutatingRoutes(t *testing.T) {
 			want: "active",
 			run: func(t *testing.T) string {
 				db := newScopedTestDB(t)
-				u := mkUser(t, db, "self", "admin", true)
+				u := mkUser(t, db, "self", true)
 				setTestPrefixDB(t, map[string][]string{"XX": {"198.51.100.0/24"}})
 				sb := model.ScopedBan{Global: true, Country: "XX", PrefixCount: 1, AddressCount: 256,
 					State: "pending", RequestedByID: &u.ID}
@@ -97,7 +97,7 @@ func TestSelfActionAllowedOnMutatingRoutes(t *testing.T) {
 			want: "rejected",
 			run: func(t *testing.T) string {
 				db := newScopedTestDB(t)
-				u := mkUser(t, db, "self", "admin", true)
+				u := mkUser(t, db, "self", true)
 				setTestPrefixDB(t, map[string][]string{"XX": {"198.51.100.0/24"}})
 				sb := model.ScopedBan{Global: true, Country: "XX", PrefixCount: 1, AddressCount: 256,
 					State: "pending", RequestedByID: &u.ID}

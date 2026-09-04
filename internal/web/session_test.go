@@ -28,7 +28,7 @@ func newAuthTestDB(t *testing.T) *gorm.DB {
 	}
 	db.Exec("DELETE FROM users")
 
-	u := &model.User{Username: "admin", Role: "admin", Active: true, AuthSource: "local"}
+	u := &model.User{Username: "admin", Active: true}
 	_ = u.SetPassword("admin12345")
 	db.Create(u)
 	return db

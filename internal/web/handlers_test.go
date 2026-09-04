@@ -9,7 +9,7 @@ import (
 )
 
 func TestBanApprove_ConcurrentApprovalsOnlyOneWins(t *testing.T) {
-	db := newUsersTestDB(t)
+	db := newWebTestDB(t)
 	if err := db.AutoMigrate(&model.BanRequest{}, &model.Dispatch{}, &model.ProtectedTarget{}, &model.BanLadder{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -18,9 +18,9 @@ func TestBanApprove_ConcurrentApprovalsOnlyOneWins(t *testing.T) {
 	db.Exec("DELETE FROM protected_targets")
 	db.Exec("DELETE FROM ban_ladders")
 
-	requester := mkUser(t, db, "requester", "operator", true)
-	mkUser(t, db, "approver1", "approver", true)
-	mkUser(t, db, "approver2", "approver", true)
+	requester := mkUser(t, db, "requester", true)
+	mkUser(t, db, "approver1", true)
+	mkUser(t, db, "approver2", true)
 
 	req := model.BanRequest{
 		ActionType: "ban", Target: "203.0.113.7", Source: "manual",
@@ -30,7 +30,7 @@ func TestBanApprove_ConcurrentApprovalsOnlyOneWins(t *testing.T) {
 		t.Fatalf("create ban request: %v", err)
 	}
 
-	r := newUsersRouter(t, db)
+	r := newWebRouter(t, db)
 	sid1 := loginAs(t, r, "approver1")
 	sid2 := loginAs(t, r, "approver2")
 

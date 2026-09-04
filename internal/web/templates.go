@@ -26,7 +26,7 @@ func templates() *template.Template {
 	template.Must(t.New("scoped_list.html").Parse(scopedListTpl))
 	template.Must(t.New("report.html").Parse(reportTpl))
 	template.Must(t.New("prefixdb.html").Parse(prefixDBTpl))
-	template.Must(t.New("users.html").Parse(usersTpl))
+	template.Must(t.New("account.html").Parse(accountTpl))
 	template.Must(t.New("audit.html").Parse(auditTpl))
 	template.Must(t.New("error.html").Parse(errTpl))
 	template.Must(t.New("approve.html").Parse(approveTpl))
@@ -40,7 +40,7 @@ const headTpl = `<style>
 .mono{font-family:"SF Mono",Menlo,Consolas,monospace}
 .topbar{height:50px;background:var(--ink);color:#fff;display:flex;align-items:center;padding:0 16px;gap:14px}
 .brand{font-weight:700;letter-spacing:.5px;font-size:17px}.brand b{color:var(--accent)}
-.spacer{flex:1}.who{font-size:14px;color:#b9c4d6}.who .role{background:var(--steel);padding:2px 8px;border-radius:3px;margin-left:6px;text-transform:uppercase;font-size:11px}
+.spacer{flex:1}.who{font-size:14px;color:#b9c4d6}
 .topbar a{color:#b9c4d6;text-decoration:none;font-size:14px}.topbar a:hover{color:#fff}
 .shell{display:flex;min-height:calc(100vh - 50px)}
 .side{width:210px;background:var(--steel)}.side a{display:block;color:#c3cee0;text-decoration:none;padding:12px 18px;border-left:3px solid transparent;font-size:14px}
@@ -59,7 +59,7 @@ input,select{width:100%;padding:9px 10px;border:1px solid #c3ccd9;border-radius:
 </style>`
 
 const navTpl = `<div class="topbar"><span class="brand">XDP<b>-ban</b></span><span class="spacer"></span>
-<span class="who">{{.u.Username}}<span class="role">{{.u.Role}}</span></span><a href="/logout">退出</a></div>
+<span class="who">{{.u.Username}}</span><a href="/logout">退出</a></div>
 <div class="shell"><aside class="side">{{range .nav}}<a href="/{{.Key}}">{{.Label}}</a>{{end}}</aside><main class="main">`
 
 const loginTpl = `<!doctype html><html><head><meta charset="utf-8"><title>xdp-ban</title>{{template "_head"}}</head>
@@ -80,17 +80,17 @@ const dashTpl = `<!doctype html><html><head><meta charset="utf-8"><title>Dashboa
 <div class="stat {{if .failed}}bad{{end}}"><div class="n">{{.failed}}</div><div class="l">下发失败</div></div>
 <div class="stat {{if .driftCount}}bad{{end}}"><div class="n">{{.driftCount}}</div><div class="l">近24h漂移告警</div></div></div>
 <div class="card" style="margin-top:16px"><div class="hd">快速操作</div><div class="bd">
-{{if .canCreate}}<a class="btn primary" href="/bans/new">新建封禁请求</a> {{end}}<a class="btn" href="/bans">查看全部请求</a>
+<a class="btn primary" href="/bans/new">新建封禁请求</a> <a class="btn" href="/bans">查看全部请求</a>
 </div></div></main></div></body></html>`
 
 const bansTpl = `<!doctype html><html><head><meta charset="utf-8"><title>封禁请求 · xdp-ban</title>{{template "_head"}}</head>
 <body>` + navTpl + `<h1>封禁请求</h1>
-{{if .canCreate}}<p><a class="btn primary" href="/bans/new">新建封禁请求</a></p>{{end}}
+<p><a class="btn primary" href="/bans/new">新建封禁请求</a></p>
 <div class="card"><table><thead><tr><th>目标</th><th>动作</th><th>来源</th><th>状态</th><th>时间</th><th></th></tr></thead><tbody>
 {{range .reqs}}<tr><td class="mono">{{.Target}}</td><td>{{.ActionType}}</td><td>{{.Source}}</td>
 <td><span class="st {{if eq .State "active"}}ok{{else if eq .State "pending"}}warn{{else}}mut{{end}}">{{.State}}</span></td>
 <td>{{.CreatedAt.Format "01-02 15:04"}}</td>
-<td>{{if and $.canApprove (eq .State "pending")}}
+<td>{{if eq .State "pending"}}
 <form method="post" action="/bans/{{.ID}}/approve" style="display:inline"><input type="hidden" name="csrf_token" value="{{$.csrf}}"><button class="btn primary">批准</button></form>
 <form method="post" action="/bans/{{.ID}}/reject" style="display:inline"><input type="hidden" name="csrf_token" value="{{$.csrf}}"><button class="btn danger">驳回</button></form>{{end}}</td></tr>
 {{end}}</tbody></table></div></main></div></body></html>`
