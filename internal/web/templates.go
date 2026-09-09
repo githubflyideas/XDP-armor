@@ -102,6 +102,13 @@ const banNewTpl = `<!doctype html><html><head><meta charset="utf-8"><title>新�
 {{if .target}}<div class="flash" style="background:#eef4ff;border:1px solid #c3d4f0;color:#1e3050">已根据采样流量预填,请核对后提交审批。</div>{{end}}
 <form method="post" action="/bans"><input type="hidden" name="csrf_token" value="{{.csrf}}"><label>目标 IP / CIDR</label><input name="target" value="{{.target}}" placeholder="203.0.113.7 或 203.0.113.0/24" required>
 <label>原因</label><input name="reason" value="{{.reason}}" placeholder="ssh 爆破 / 恶意扫描" required>
+{{if .selfWarn}}<div style="margin-top:14px;padding:10px 12px;border:1px solid #f2c2ba;border-radius:4px;background:#fbe9e7">
+<label style="display:flex;align-items:center;gap:8px;font-weight:600;color:#a3271a;margin:0">
+  <input type="checkbox" name="self_ack" value="1" style="width:auto" {{if .selfAck}}checked{{end}} required>
+  我已确认会切断自己的访问,继续提交
+</label>
+<div style="color:#7a3c30;font-size:11.5px;margin-top:6px;line-height:1.5">此确认会记入审计。失联后请在物理控制台上用 <span class="mono">xdp-ban status</span> / <span class="mono">xdp-ban why &lt;ip&gt;</span> 定位 —— 这些规则不会出现在 iptables/nft/firewalld 里。</div>
+</div>{{end}}
 <div style="margin-top:18px"><button class="btn primary">提交请求</button> <a class="btn" href="/bans">取消</a></div></form>
 </div></div></main></div></body></html>`
 

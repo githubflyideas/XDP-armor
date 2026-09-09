@@ -25,6 +25,9 @@ func (h *Handler) scopedBanNew(c *gin.Context) {
 	data := gin.H{
 		"u": u, "nav": navSections,
 		"usage": h.quota.Usage(),
+		// 这四项在错误重渲染时用来回填表单;GET 时给空串,好让模板里的
+		// `eq .Code $.country` 有一个同类型的值可比,不至于在渲染期报错。
+		"targetIP": "", "reason": "", "country": "", "asn": "",
 	}
 	if db == nil {
 		data["dbMissing"] = true
@@ -103,12 +106,35 @@ func (h *Handler) scopedPreview(c *gin.Context) {
 func (h *Handler) scopedBanCreate(c *gin.Context) {
 	u := h.currentUser(c)
 	nav := navSections
+
+	// selfWarn 一旦置起就必须在后续每次重渲染里保持:提交要过两道确认(影响面
+	// 配额 + 会不会切断自己),如果第二次重渲染把自封复选框收回去,勾过的值就丢了,
+	// 下一次提交又会被自封检查拦下 —— 两道确认互相踩,永远提交不上去。
+	selfWarn := false
+	selfAck := selfAcked(c)
 	fail := func(code int, msg string) {
-		c.HTML(code, "scoped_new.html", gin.H{
+		data := gin.H{
 			"u": u, "nav": nav, "err": msg,
 			"usage": h.quota.Usage(),
 			"csrf":  h.csrfTokenFor(c),
-		})
+			// 出错重渲染时把填过的内容原样带回来。scoped 表单要选国家/AS、
+			// 还要点一次预览,让人从零重填一遍就等于逼他放弃勾选确认。
+			// country 要跟着 parseSelector 一起大写,否则模板里
+			// `eq .Code $.country` 比不上,选中态会丢。
+			"targetIP": strings.TrimSpace(c.PostForm("target_ip")),
+			"reason":   strings.TrimSpace(c.PostForm("reason")),
+			"country":  strings.ToUpper(strings.TrimSpace(c.PostForm("country"))),
+			"asn":      strings.TrimSpace(c.PostForm("asn")),
+			"selfWarn": selfWarn,
+			"selfAck":  selfAck,
+		}
+		// 国家下拉的选项来自前缀库,不重新塞回去的话重渲染出来是个空 select ——
+		// 表单看着在,却已经选不出任何国家,"勾选确认后重新提交"这条路照样是死的。
+		if pdb := prefixdb.Global(); pdb != nil {
+			data["dbStats"] = pdb.Stats()
+			data["countries"] = pdb.Countries()
+		}
+		c.HTML(code, "scoped_new.html", data)
 	}
 
 	db := prefixdb.Global()
@@ -150,6 +176,20 @@ func (h *Handler) scopedBanCreate(c *gin.Context) {
 	if global {
 		if reason := h.guard().VetoReasonAll(cidrs); reason != "" {
 			fail(http.StatusBadRequest, "解析出的地址范围命中保护集:"+reason)
+			return
+		}
+	}
+
+	// 按国家/AS 封禁最容易踩的坑就在这里:选中的是"某个国家"或"某个 AS",
+	// 没人会去逐条核对里面有没有自己的出口地址。命中就拦一次。
+	if me, hit, locked := selfLockoutPrefix(c, cidrs); locked {
+		selfWarn = true
+		if !selfAck {
+			if global {
+				fail(http.StatusBadRequest, selfLockoutMsgGlobal(me, hit))
+			} else {
+				fail(http.StatusBadRequest, selfLockoutMsgScoped(me, hit, targetIP))
+			}
 			return
 		}
 	}
@@ -207,6 +247,9 @@ func (h *Handler) scopedBanCreate(c *gin.Context) {
 
 	detail := fmt.Sprintf("scope=%s target=%s prefixes=%d addresses=%d override=%v global=%v",
 		sel.String(), targetIP, d.PrefixCount, d.AddressCount, sb.OverrideAck, global)
+	if selfAck && selfWarn {
+		detail += fmt.Sprintf(" self_ack=true from=%s", c.ClientIP())
+	}
 	_ = model.WriteAudit(h.db, &u.ID, u.Label(), "ScopedBan", itoa(sb.ID), "created", detail)
 
 	c.Redirect(http.StatusFound, "/scoped")

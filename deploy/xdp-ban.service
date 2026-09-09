@@ -1,0 +1,43 @@
+[Unit]
+Description=xdp-ban — governed XDP banning (web UI + executor)
+Documentation=https://github.com/githubflyideas/XDP-invisible-armor
+# XDP 挂在网卡上,网络就绪之后再起,否则 -iface 指向的接口可能还不存在。
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# 必须 root。原因有三个,少一个都起不来:
+#   1. 加载并 attach XDP 程序需要 CAP_NET_ADMIN + CAP_BPF;
+#   2. 把四张 map pin 到 /sys/fs/bpf/xdp-ban/ 需要写 bpffs;
+#   3. 内存锁定上限(见下面 LimitMEMLOCK)在非特权进程下改不动。
+# 用 AmbientCapabilities 收窄理论上可行,但 bpffs 的写入路径在各发行版上
+# 表现不一致,踩了之后的症状是"服务起来了、封禁却静默不生效"——
+# 这比直接 root 危险得多。
+User=root
+
+WorkingDirectory=/var/lib/xdp-ban
+Environment=XDPBAN_DB=/var/lib/xdp-ban/xdpban.db
+# XDPBAN_IFACE=eth0 之类的部署相关配置放这里,改完 systemctl restart 即可。
+EnvironmentFile=/etc/xdp-ban/xdp-ban.env
+ExecStart=/usr/local/bin/xdp-ban
+
+# 老内核(< 5.11)用 RLIMIT_MEMLOCK 计 eBPF 内存,默认 64KB,装不下 LPM_TRIE。
+# 新内核改用 cgroup 计费,这一行无害。
+LimitMEMLOCK=infinity
+
+# SIGTERM 触发优雅退出:排空在途 HTTP 请求、停执行器循环、卸载 XDP。
+# 给足时间,否则被 SIGKILL 打断会把 XDP 程序留在网卡上。
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+Restart=on-failure
+RestartSec=5s
+
+# 有意不加 ProtectSystem=strict / ProtectKernelTunables:
+# 两者都会让 /sys 只读,map pin 直接失败,而失败的样子是"能启动、
+# 但 xdp-ban status 什么都看不到"——最难查的那一类故障。
+
+[Install]
+WantedBy=multi-user.target

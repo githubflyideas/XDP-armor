@@ -51,7 +51,7 @@ const scopedNewTpl = `<!doctype html><html><head><meta charset="utf-8"><title>�
 <form method="post" action="/scoped" id="scopedForm">
 <input type="hidden" name="csrf_token" value="{{.csrf}}">
 <div class="card"><div class="hd">① 目标主机(留空 = 全局封禁,写入全局封禁表)</div><div class="bd">
-<input name="target_ip" id="targetIP" placeholder="10.0.1.100(留空则为全局封禁)">
+<input name="target_ip" id="targetIP" value="{{.targetIP}}" placeholder="10.0.1.100(留空则为全局封禁)">
 <div class="hint">填写时,范围封禁只对流向该主机的流量生效。留空时对所有受保护目标同时生效,请谨慎操作。</div>
 </div></div>
 
@@ -61,20 +61,20 @@ const scopedNewTpl = `<!doctype html><html><head><meta charset="utf-8"><title>�
     <label>国家 / 地区</label>
     <select name="country" id="country">
       <option value="">— 不限 —</option>
-      {{range .countries}}<option value="{{.Code}}">{{.Code}} ({{.CIDRBlocks}} 段)</option>{{end}}
+      {{range .countries}}<option value="{{.Code}}"{{if eq .Code $.country}} selected{{end}}>{{.Code}} ({{.CIDRBlocks}} 段)</option>{{end}}
     </select>
     <div class="hint">括号内是该国在前缀库中的区间数,可粗略预判表项开销。</div>
   </div>
   <div>
     <label>AS 号</label>
-    <input id="asnSearch" placeholder="输入 AS 号或名称,如 4134 / CHINANET" autocomplete="off">
+    <input id="asnSearch" value="{{if .asn}}AS{{.asn}}{{end}}" placeholder="输入 AS 号或名称,如 4134 / CHINANET" autocomplete="off">
     <div class="asn-results" id="asnResults"></div>
-    <input type="hidden" name="asn" id="asnValue">
-    <div class="hint" id="asnPicked">全球有十万级 AS,故用搜索而非下拉。</div>
+    <input type="hidden" name="asn" id="asnValue" value="{{.asn}}">
+    <div class="hint" id="asnPicked">{{if .asn}}已选 AS{{.asn}}{{else}}全球有十万级 AS,故用搜索而非下拉。{{end}}</div>
   </div>
 </div>
 <label style="margin-top:14px">封禁原因</label>
-<input name="reason" placeholder="例:该 AS 持续对 10.0.1.100:443 发起 SYN 洪水" required>
+<input name="reason" value="{{.reason}}" placeholder="例:该 AS 持续对 10.0.1.100:443 发起 SYN 洪水" required>
 </div></div>
 
 <div class="card"><div class="hd">③ 影响面预览(提交前必须查看)</div><div class="bd">
@@ -87,6 +87,17 @@ const scopedNewTpl = `<!doctype html><html><head><meta charset="utf-8"><title>�
   </label>
   <div class="hint">此确认会记入审计,可追溯到操作人。</div>
 </div>
+{{if .selfWarn}}
+<div style="margin-top:12px;padding:10px 12px;border:1px solid #f2c2ba;border-radius:4px;background:#fbe9e7">
+  <label style="display:flex;align-items:center;gap:8px;font-weight:600;color:#a3271a;margin:0">
+    <input type="checkbox" name="self_ack" value="1" style="width:auto"{{if .selfAck}} checked{{end}} required>
+    我已确认会切断自己的访问,继续提交
+  </label>
+  <div class="hint" style="color:#7a3c30">选中的国家 / AS 里包含了你自己的地址。失联后这些规则不会出现在
+  iptables/nft/firewalld 里,只能在物理控制台上用 <span class="mono">xdp-ban status</span> /
+  <span class="mono">xdp-ban why &lt;ip&gt;</span> 定位。此确认会记入审计。</div>
+</div>
+{{end}}
 </div></div>
 
 <div style="margin-bottom:24px">

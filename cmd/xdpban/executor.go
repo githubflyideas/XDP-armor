@@ -193,6 +193,50 @@ func (m *banMaps) ensureTarget(addr netip.Addr) (uint32, error) {
 	return tid, nil
 }
 
+// restoreTargets 从 target_hosts map 重建 addr→target_id 映射,并把
+// nextTargetID 推到已用最大值之后。
+//
+// 只有 map 被 pin 住时才有内容可恢复:那时 map 跨进程重启存活,而映射表
+// 只活在内存里。不恢复的后果不是"少了个优化",是错的 —— nextTargetID 从 1
+// 重新开始,下一台目标主机会拿到已经被别人占用的 target_id,src_ban 里那批
+// 旧的源前缀会立刻开始作用在新目标上。
+//
+// 返回恢复的条数。解码失败就地返回错误,不做部分恢复后继续:半张映射表比
+// 空表更危险,空表只是回滚查不到键(已有的静默成功路径),半张表会张冠李戴。
+func (m *banMaps) restoreTargets() (int, error) {
+	it := m.targetHosts.Iterate()
+	var key, val []byte
+	var maxID uint32
+	restored := make(map[string]uint32)
+
+	for it.Next(&key, &val) {
+		addr, err := banmap.DecodeTargetKey(key)
+		if err != nil {
+			return 0, fmt.Errorf("解码 %s key: %w", banmap.MapTargetHosts, err)
+		}
+		tid, err := banmap.DecodeTargetID(val)
+		if err != nil {
+			return 0, fmt.Errorf("解码 %s value (%s): %w", banmap.MapTargetHosts, addr, err)
+		}
+		if tid == 0 {
+			return 0, fmt.Errorf("%s 中 %s 的 target_id 为 0 —— 0 是保留值,map 内容不可信",
+				banmap.MapTargetHosts, addr)
+		}
+		restored[addr.String()] = tid
+		if tid > maxID {
+			maxID = tid
+		}
+	}
+
+	for k, v := range restored {
+		m.targetIDs[k] = v
+	}
+	if maxID >= m.nextTargetID {
+		m.nextTargetID = maxID + 1
+	}
+	return len(restored), nil
+}
+
 // ListGlobalBans 遍历 src_ban_global map,返回当前存活的全局封禁前缀集合
 // (键为前缀的字符串表示,如 "203.0.113.0/24")。用于与 DB 侧 dispatch 记录做回读核对。
 func (m *banMaps) ListGlobalBans() (map[string]bool, error) {

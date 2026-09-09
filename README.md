@@ -23,6 +23,7 @@ XDP-ban is a governed ban tool: submit a ban, approve it as a deliberate second 
 - **Escalating bans** — repeat offenders get progressively longer bans, up to permanent.
 - **Scoped bans** — pick source ranges by **country / ASN**, protect a single target host. Impact is previewed and quota-checked before submission.
 - **Pure XDP enforcement** — no nftables, no iptables. The agent writes eBPF maps directly, in **generic (SKB) mode** so it works on any NIC driver, not just the ones with native XDP support.
+- **Answers "why is this host unreachable?"** — because the rules are invisible to `iptables`/`nft`/`firewalld` by design, the same binary ships `xdp-ban status` and `xdp-ban why <ip>`, reading the pinned kernel maps. It also refuses, on the first attempt, to accept a ban that would cut off the address you are submitting from.
 - **Single binary** — pure Go, `CGO_ENABLED=0`, no external DB, no HTTP API surface. Copy and run.
 
 ## Architecture
@@ -67,7 +68,7 @@ Download the binary and run it. No dependencies, no build step — the eBPF obje
 
 ```bash
 # x86_64
-curl -L -o xdp-ban https://github.com/githubflyideas/xdp-ban/releases/download/v0.28/xdp-ban-linux-amd64
+curl -L -o xdp-ban https://github.com/githubflyideas/XDP-invisible-armor/releases/latest/download/xdp-ban-linux-amd64
 # arm64: replace amd64 with arm64 in the URL above
 
 chmod +x xdp-ban
@@ -97,7 +98,7 @@ did.
 
 Data lives in a single `xdpban.db` file. Back up = copy the file.
 
-All releases: https://github.com/githubflyideas/xdp-ban/releases
+All releases: https://github.com/githubflyideas/XDP-invisible-armor/releases
 
 ## Scoped bans (country / ASN)
 
@@ -108,7 +109,67 @@ XDPBAN_PREFIX_DB=./ip2asn-v4.tsv.gz ./xdp-ban
 
 Without it, everything else works and the UI tells you the feature is unavailable.
 
+## Troubleshooting: none of this shows up in `iptables`
+
+XDP runs at the driver hook, **before netfilter**. That is the entire point — and
+it also means `iptables -L`, `nft list ruleset` and `firewall-cmd --list-all`
+will never list a single ban, no matter how much traffic is being dropped. If
+those are the only places you look, a host that just banned your own `/24` looks
+like an outage with no cause.
+
+The same binary answers that from the console. Neither subcommand needs
+`-iface`, neither needs the daemon to be running, and neither writes anything:
+
+```bash
+sudo xdp-ban status            # what the kernel is actually enforcing
+sudo xdp-ban why 203.0.113.7   # is this address being dropped right now, and by which rule
+```
+
+`status` prints the XDP attachments it can find, the four kernel counters, and
+every map entry **split into live and expired**. That split is the point: XDP
+never deletes keys — it compares `expires_at` against `bpf_ktime_get_ns()` and
+just passes the packet — so "the key is in the map" is *not* the same as "this
+address is being dropped", and a raw `bpftool map dump` will happily lead you to
+the opposite conclusion. A `dropped` counter of zero is stated explicitly,
+because it exonerates XDP entirely and sends you to look elsewhere.
+
+`why` asks the LPM trie the same question the kernel asks, so querying a single
+address correctly reports the covering `/24` that is actually responsible, not
+just an exact-match miss.
+
+Both read the maps pinned under `/sys/fs/bpf/xdp-ban/`, which is the source of
+truth — not the SQLite file, which only records what was *intended*. If you
+don't have the binary at hand,
+`bpftool map dump pinned /sys/fs/bpf/xdp-ban/src_ban_global` is the fallback.
+
+### It won't let you cut yourself off by accident
+
+Submitting a ban whose source range covers the address you are browsing from is
+refused on the first attempt. The message names the prefix that matched and the
+commands to undo it from a physical console, and the form comes back with a
+checkbox to submit anyway — a deliberate self-ban is allowed, a mistyped `/24`
+is not silently accepted. Ticking that box is recorded in the audit log together
+with the address it came from, which is the only evidence that survives if the
+UI then goes dark.
+
+This matters most for scoped bans: nobody audits all 400 prefixes a country or
+ASN expands into, so the check runs against the resolved list, not the selector.
+
+The hard-protected set (`127.0.0.0/8`, `::1/128`, `0.0.0.0/32`, plus any
+configured protected target) is checked *before* this and is **not** overridable
+by that checkbox.
+
 ## Configuration
+
+`xdp-ban` subcommands (read-only, no `-iface`, no root needed beyond map access):
+
+| Command | Purpose |
+|---|---|
+| `xdp-ban status` | Snapshot of every rule the kernel holds, live vs. expired, plus counters |
+| `xdp-ban why <ip>` | Whether that address is being dropped right now, and by which rule |
+| `xdp-ban version` | Print the version |
+
+Run with no subcommand to start the daemon (web UI + executor).
 
 `xdp-ban` flags:
 
@@ -147,6 +208,17 @@ directly) to set the real production interface. `Restart=on-failure` restarts
 the process on a crash; `systemctl restart xdp-ban` for deploys sends
 `SIGTERM`, which triggers a graceful shutdown (drains in-flight HTTP requests,
 stops the executor loop, detaches XDP) before the process exits.
+
+The maps are pinned under `/sys/fs/bpf/xdp-ban/`, so live bans survive that
+restart and `xdp-ban status` keeps working while the daemon is down. That needs
+bpffs mounted — it is on every modern systemd distro; if it isn't, the daemon
+logs a warning with the `mount -t bpf bpf /sys/fs/bpf` fix and keeps enforcing
+bans without the diagnostic path. A **host** reboot clears bpffs entirely, and
+the 5-minute reconcile loop reports the resulting drift.
+
+The unit deliberately omits `ProtectSystem=strict` and friends: they make `/sys`
+read-only, which breaks map pinning, and the failure mode is a service that
+starts fine but shows nothing in `xdp-ban status`.
 
 ## Build from source
 

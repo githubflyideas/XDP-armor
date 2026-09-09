@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"github.com/xdpban/xdp-ban/internal/banmap"
 	"github.com/xdpban/xdp-ban/internal/model"
 	"github.com/xdpban/xdp-ban/internal/prefixdb"
 	"github.com/xdpban/xdp-ban/internal/web"
@@ -20,7 +22,43 @@ import (
 
 var Version = "dev"
 
+// usage 里必须提到 status/why。XDP 规则不出现在 iptables/nft/firewalld 的任何
+// 列表里,`xdp-ban -h` 是运维手里唯一还能自己发现这两条排障命令的地方。
+func usage() {
+	out := flag.CommandLine.Output()
+	fmt.Fprintf(out, "xdp-ban %s —— 基于 XDP 的封禁执行器\n\n", Version)
+	fmt.Fprintf(out, "用法:\n")
+	fmt.Fprintf(out, "  xdp-ban -iface <ifname>   启动守护进程(Web + 执行器)\n")
+	fmt.Fprintf(out, "  xdp-ban status            打印内核侧的封禁快照(只读,不需要 -iface)\n")
+	fmt.Fprintf(out, "  xdp-ban why <ip>          回答某个 IP 此刻是否正被 XDP 丢包\n")
+	fmt.Fprintf(out, "  xdp-ban version           打印版本号\n\n")
+	fmt.Fprintf(out, "排障提示: XDP 挂在 netfilter 之前,规则永远不会出现在 iptables -L /\n")
+	fmt.Fprintf(out, "nft list ruleset / firewall-cmd --list-all 里。要看真实生效的规则,\n")
+	fmt.Fprintf(out, "只有 `xdp-ban status`(或 bpftool map dump pinned %s/...)。\n\n", banmap.PinDir)
+	fmt.Fprintf(out, "守护进程参数:\n")
+	flag.PrintDefaults()
+}
+
 func main() {
+	flag.Usage = usage
+
+	// 子命令在 flag.Parse 之前分流:status/why 是只读诊断,不该被"必须指定
+	// -iface"挡住 —— 需要它们的时候,往往正是守护进程起不来或 Web 进不去的时候。
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "status":
+			os.Exit(runStatus(os.Stdout, os.Stderr))
+		case "why":
+			os.Exit(runWhy(os.Stdout, os.Stderr, os.Args[2:]))
+		case "version", "-version", "--version":
+			fmt.Printf("xdp-ban %s\n", Version)
+			os.Exit(0)
+		case "help":
+			usage()
+			os.Exit(0)
+		}
+	}
+
 	dbPath := env("XDPBAN_DB", "xdpban.db")
 	addr := env("XDPBAN_ADDR", ":8080")
 

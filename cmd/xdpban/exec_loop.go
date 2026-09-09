@@ -41,7 +41,8 @@ func startExecutor(db *gorm.DB, iface string) (*banMaps, func()) {
 	if err != nil {
 		log.Fatalf("load ebpf spec: %v", err)
 	}
-	coll, err := ebpf.NewCollection(spec)
+
+	coll, pinned, err := newPinnedCollection(spec)
 	if err != nil {
 		log.Fatalf("create ebpf collection: %v", err)
 	}
@@ -53,6 +54,10 @@ func startExecutor(db *gorm.DB, iface string) (*banMaps, func()) {
 	}
 	log.Printf("✓ eBPF map 就绪: %s / %s / %s",
 		banmap.MapGlobalBans, banmap.MapTargetHosts, banmap.MapSrcBans)
+	if pinned {
+		log.Printf("✓ map 已 pin 到 %s —— 排障用 `xdp-ban status` / `xdp-ban why <ip>`",
+			banmap.PinDir)
+	}
 
 	ifc, err := net.InterfaceByName(iface)
 	if err != nil {
@@ -94,11 +99,67 @@ func startExecutor(db *gorm.DB, iface string) (*banMaps, func()) {
 		boot,
 	)
 
+	// pin 之后 map 会跨进程重启存活,内存里的 target_id 映射却不会。
+	// 不读回来就会把 target_id=1 重新分配给另一台主机,让旧规则突然作用在
+	// 新目标上 —— 这是 pin 带来的唯一新风险,在这里一次性消掉。
+	if n, err := bm.restoreTargets(); err != nil {
+		log.Printf("WARN 重建 target_id 映射失败: %v ——"+
+			"定向封禁的回滚可能找不到对应键,建议清空 %s/%s 后重启",
+			err, banmap.PinDir, banmap.MapTargetHosts)
+	} else if n > 0 {
+		log.Printf("✓ 从 %s 恢复了 %d 个目标主机的 target_id 映射(上次进程留下的)",
+			banmap.MapTargetHosts, n)
+	}
+
 	closeFn := func() {
 		lnk.Close()
 		coll.Close()
 	}
 	return bm, closeFn
+}
+
+// newPinnedCollection 加载 collection 并把四张 map pin 到 banmap.PinDir。
+//
+// pin 失败不致命:bpffs 没挂载的宿主上照样要能封禁,只是丢掉 `xdp-ban status`
+// 这条排障路径。所以降级继续,但把补救命令原样打进日志 —— 这正是本次要解决的
+// "出了事查不出来"的场景,不能悄悄失败。
+func newPinnedCollection(spec *ebpf.CollectionSpec) (*ebpf.Collection, bool, error) {
+	if err := os.MkdirAll(banmap.PinDir, 0o700); err != nil {
+		log.Printf("WARN 无法创建 pin 目录 %s: %v —— map 将不被 pin,"+
+			"`xdp-ban status` / `xdp-ban why` 与 bpftool 都看不到规则。"+
+			"补救:mount -t bpf bpf /sys/fs/bpf", banmap.PinDir, err)
+		coll, err := ebpf.NewCollection(spec)
+		return coll, false, err
+	}
+
+	for _, name := range banmap.PinnedMaps() {
+		ms, ok := spec.Maps[name]
+		if !ok {
+			continue
+		}
+		ms.Pinning = ebpf.PinByName
+	}
+
+	coll, err := ebpf.NewCollectionWithOptions(spec, ebpf.CollectionOptions{
+		Maps: ebpf.MapOptions{PinPath: banmap.PinDir},
+	})
+	if err == nil {
+		return coll, true, nil
+	}
+
+	// 最常见的失败是上次留下的 pin 与本次 spec 不兼容(改过 map 定义后重新
+	// make bpf)。这种情况下报出确切的清理命令,比让人猜 EINVAL 有用得多。
+	log.Printf("WARN 带 pin 加载失败: %v —— 退回不 pin 的加载方式。"+
+		"若是升级后 map 定义变了,rm -rf %s 再重启即可(会清掉存活的封禁,"+
+		"reconcile 循环随后会把漂移报出来)", err, banmap.PinDir)
+
+	for _, name := range banmap.PinnedMaps() {
+		if ms, ok := spec.Maps[name]; ok {
+			ms.Pinning = ebpf.PinNone
+		}
+	}
+	coll, err2 := ebpf.NewCollection(spec)
+	return coll, false, err2
 }
 
 func runExecutorLoop(ctx context.Context, db *gorm.DB, bm *banMaps, interval time.Duration) {

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -205,31 +206,65 @@ func (h *Handler) banNew(c *gin.Context) {
 func (h *Handler) banCreate(c *gin.Context) {
 	u := h.currentUser(c)
 	target := strings.TrimSpace(c.PostForm("target"))
-	nav := navSections
+	reason := strings.TrimSpace(c.PostForm("reason"))
+
+	// fail 必须把 csrf / target / reason 一起回填。之前这三个错误分支只传了
+	// err,重渲染出来的表单里 csrf_token 是空的 —— 用户改完再提交直接吃 403,
+	// 看起来像"改对了反而更坏了"。自封确认要走的正是"勾上复选框再提交"这条路,
+	// 没有回填就根本走不通。
+	//
+	// selfWarn 一旦置起就一直带着:后面还可能有别的失败(比如建记录失败),
+	// 那时若把复选框收回去,已经勾过的确认就丢了,下次提交又会被拦。
+	selfWarn := false
+	selfAck := selfAcked(c)
+	fail := func(code int, msg string) {
+		c.HTML(code, "ban_new.html", gin.H{
+			"u": u, "nav": navSections, "err": msg,
+			"target": target, "reason": reason,
+			"csrf":     h.csrfTokenFor(c),
+			"selfWarn": selfWarn,
+			"selfAck":  selfAck,
+		})
+	}
 
 	if target == "" {
-		c.HTML(http.StatusBadRequest, "ban_new.html", gin.H{"u": u, "nav": nav, "err": "目标不能为空"})
+		fail(http.StatusBadRequest, "目标不能为空")
 		return
 	}
 
 	if reason := h.guard().VetoReason(target); reason != "" {
-		c.HTML(http.StatusBadRequest, "ban_new.html", gin.H{"u": u, "nav": nav, "err": reason})
+		fail(http.StatusBadRequest, reason)
 		return
+	}
+
+	// 保护集放行之后,再问一句"这条规则会不会把提交者自己切掉"。
+	// 顺序有意如此:硬保护集的否决是终局的,自封只是要一次确认,不该抢在前面。
+	if me, hit, locked := selfLockoutTarget(c, target); locked {
+		selfWarn = true
+		if !selfAck {
+			fail(http.StatusBadRequest, selfLockoutMsgGlobal(me, hit))
+			return
+		}
 	}
 
 	ttl := h.nextTTL(target)
 
 	req := model.BanRequest{
 		ActionType: "ban", Target: target, Source: "manual",
-		Reason: strings.TrimSpace(c.PostForm("reason")), State: "pending",
+		Reason: reason, State: "pending",
 		RequestedByID: &u.ID, ApprovalMode: "manual_dual",
 		TTLSeconds: ttl,
 	}
 	if err := h.db.Create(&req).Error; err != nil {
-		c.HTML(http.StatusInternalServerError, "ban_new.html", gin.H{"u": u, "nav": nav, "err": err.Error()})
+		fail(http.StatusInternalServerError, err.Error())
 		return
 	}
-	_ = model.WriteAudit(h.db, &u.ID, u.Label(), "BanRequest", itoa(req.ID), "created", target)
+	detail := target
+	if selfWarn && selfAck {
+		// 把确认记进审计:事后复盘"谁把自己封了"时,这一行是唯一的证据。
+		detail = fmt.Sprintf("%s self_ack=true from=%s", target, c.ClientIP())
+	}
+	_ = model.WriteAudit(h.db, &u.ID, u.Label(), "BanRequest", itoa(req.ID), "created", detail)
 
 	if err := h.approvals.GenTokensAndSend(&req, &u.ID); err != nil {
 		log.Printf("发送审批通知失败 req=%d: %v", req.ID, err)
