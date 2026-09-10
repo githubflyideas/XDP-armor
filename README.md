@@ -33,7 +33,7 @@
 
 ```bash
 # x86_64;arm64 把 amd64 换成 arm64
-curl -L -o xdp-ban https://github.com/githubflyideas/XDP-invisible-armor/releases/latest/download/xdp-ban-linux-amd64
+curl -L -o xdp-ban https://github.com/githubflyideas/XDP-armor/releases/latest/download/xdp-ban-linux-amd64
 chmod +x xdp-ban
 sudo ./xdp-ban -iface eth0    # http://localhost:8080 —— 挂 XDP 要 root
 ```
@@ -49,7 +49,7 @@ sudo ./xdp-ban -iface eth0    # http://localhost:8080 —— 挂 XDP 要 root
 
 数据只在一个 `xdpban.db` 文件里。备份 = 拷这个文件。
 
-全部发布:https://github.com/githubflyideas/XDP-invisible-armor/releases
+全部发布:https://github.com/githubflyideas/XDP-armor/releases
 
 ## 按国家 / ASN 封
 

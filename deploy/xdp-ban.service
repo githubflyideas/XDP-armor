@@ -1,6 +1,6 @@
 [Unit]
 Description=xdp-ban — governed XDP banning (web UI + executor)
-Documentation=https://github.com/githubflyideas/XDP-invisible-armor
+Documentation=https://github.com/githubflyideas/XDP-armor
 # XDP 挂在网卡上,网络就绪之后再起,否则 -iface 指向的接口可能还不存在。
 After=network-online.target
 Wants=network-online.target
