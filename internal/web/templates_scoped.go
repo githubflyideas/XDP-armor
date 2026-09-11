@@ -91,9 +91,9 @@ const scopedNewTpl = `<!doctype html><html><head><meta charset="utf-8"><title>�
 <div style="margin-top:12px;padding:10px 12px;border:1px solid #f2c2ba;border-radius:4px;background:#fbe9e7">
   <label style="display:flex;align-items:center;gap:8px;font-weight:600;color:#a3271a;margin:0">
     <input type="checkbox" name="self_ack" value="1" style="width:auto"{{if .selfAck}} checked{{end}} required>
-    我已确认会切断自己的访问,继续提交
+    我确认会切断自己、且能从别处回退,继续提交
   </label>
-  <div class="hint" style="color:#7a3c30">选中的国家 / AS 里包含了你自己的地址。失联后这些规则不会出现在
+  <div class="hint" style="color:#7a3c30">选中的国家 / AS 里包含了你此刻正用着的地址。只要还留着另一条路(控制台或别的地址)就能回退 —— 失联后这些规则不会出现在
   iptables/nft/firewalld 里,只能在物理控制台上用 <span class="mono">xdp-ban status</span> /
   <span class="mono">xdp-ban why &lt;ip&gt;</span> 定位。此确认会记入审计。</div>
 </div>

@@ -29,6 +29,7 @@ func usage() {
 	fmt.Fprintf(out, "xdp-ban %s —— 基于 XDP 的封禁执行器\n\n", Version)
 	fmt.Fprintf(out, "用法:\n")
 	fmt.Fprintf(out, "  xdp-ban -iface <ifname>   启动守护进程(Web + 执行器)\n")
+	fmt.Fprintf(out, "  xdp-ban demo              一条命令自演一遍封禁对 iptables 隐形(需 root)\n")
 	fmt.Fprintf(out, "  xdp-ban status            打印内核侧的封禁快照(只读,不需要 -iface)\n")
 	fmt.Fprintf(out, "  xdp-ban why <ip>          回答某个 IP 此刻是否正被 XDP 丢包\n")
 	fmt.Fprintf(out, "  xdp-ban version           打印版本号\n\n")
@@ -50,6 +51,8 @@ func main() {
 			os.Exit(runStatus(os.Stdout, os.Stderr))
 		case "why":
 			os.Exit(runWhy(os.Stdout, os.Stderr, os.Args[2:]))
+		case "demo":
+			os.Exit(runDemo(os.Stdout, os.Stderr, os.Args[2:]))
 		case "version", "-version", "--version":
 			fmt.Printf("xdp-ban %s\n", Version)
 			os.Exit(0)

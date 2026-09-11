@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"strings"
 	"testing"
@@ -339,6 +340,88 @@ func TestClientAddr_PrefersForwardedFor(t *testing.T) {
 	// 用 RemoteIP 这个检查就永远不会触发,等于白写。
 	if addr.String() != "203.0.113.9" {
 		t.Errorf("clientAddr = %s,期望 203.0.113.9(取 XFF 而不是 RemoteAddr)", addr)
+	}
+}
+
+// stubSessionPeers 在测试期间把"读 socket 表"换成固定返回值,退出时还原。
+// 真实现读 /proc,单元测试(尤其这台 Windows 开发机)拿不到,不注入就测不到
+// socket 表这条路 —— 而它正是比 ClientIP 可靠的那条。
+func stubSessionPeers(t *testing.T, addrs ...string) {
+	t.Helper()
+	var peers []netip.Addr
+	for _, s := range addrs {
+		peers = append(peers, netip.MustParseAddr(s))
+	}
+	prev := sessionPeers
+	sessionPeers = func() []netip.Addr { return peers }
+	t.Cleanup(func() { sessionPeers = prev })
+}
+
+// 这条盯住新加的可靠信号:即便 ClientIP 完全无害(直连、没有伪造 XFF),
+// 只要 socket 表显示操作者此刻正从某地址连着管理端口,封住那个地址就必须先拦。
+// 这正是反代场景下 ClientIP 失灵、而 socket 表还能救回一次控制台之旅的地方。
+func TestBanCreate_LiveSessionPeerIsBlockedEvenWithBenignClientIP(t *testing.T) {
+	db := newSelfBanDB(t)
+	mkUser(t, db, "op", true)
+	r := newWebRouter(t, db)
+	sid := loginAs(t, r, "op")
+	stubSessionPeers(t, "203.0.113.9") // socket 表:操作者正从这里连着 web
+
+	// 用 postAs(不带 X-Forwarded-For),ClientIP 落在 httptest 默认的
+	// 192.0.2.1,根本不在 203.0.113.0/24 里 —— 触发的只可能是 socket 表这条路。
+	form := url.Values{"target": {"203.0.113.0/24"}, "reason": {"ssh 爆破"}}
+	w := postAs(t, r, sid, "/bans", form)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("状态码 %d,期望 400 —— socket 表显示会切掉当前会话,必须先拦", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "203.0.113.9") || !strings.Contains(body, "管理端口") {
+		t.Errorf("提示应点明是 socket 表检测到的活跃会话地址:\n%s", body)
+	}
+	if !strings.Contains(body, `name="self_ack"`) {
+		t.Errorf("必须渲染确认复选框:\n%s", body)
+	}
+
+	var n int64
+	db.Model(&model.BanRequest{}).Count(&n)
+	if n != 0 {
+		t.Errorf("被拦下的提交不应留下 BanRequest,实际 %d 条", n)
+	}
+
+	// 勾了"能从别处回退"就该放行 —— 这是防手滑,不是权限。
+	form["self_ack"] = []string{"1"}
+	if code := postAs(t, r, sid, "/bans", form).Code; code != http.StatusFound {
+		t.Fatalf("勾选确认后状态码 %d,期望 302", code)
+	}
+}
+
+func TestListenPort_ParsesXDPBANAddr(t *testing.T) {
+	cases := map[string]int{
+		":8080":          8080,
+		"127.0.0.1:9000": 9000,
+		"0.0.0.0:443":    443,
+		"garbage":        8080, // 解析失败退回默认
+		":0":             8080, // 非法端口退回默认
+	}
+	for addr, want := range cases {
+		t.Setenv("XDPBAN_ADDR", addr)
+		if got := listenPort(); got != want {
+			t.Errorf("listenPort(XDPBAN_ADDR=%q) = %d,期望 %d", addr, got, want)
+		}
+	}
+	// protectPorts 必须始终含 22(SSH 回退路),并带上监听端口。
+	t.Setenv("XDPBAN_ADDR", ":8080")
+	ports := protectPorts()
+	has := func(p int) bool {
+		for _, x := range ports {
+			if x == p {
+				return true
+			}
+		}
+		return false
+	}
+	if !has(22) || !has(8080) {
+		t.Errorf("protectPorts = %v,应同时包含 22 和 8080", ports)
 	}
 }
 

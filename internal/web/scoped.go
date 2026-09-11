@@ -182,13 +182,13 @@ func (h *Handler) scopedBanCreate(c *gin.Context) {
 
 	// 按国家/AS 封禁最容易踩的坑就在这里:选中的是"某个国家"或"某个 AS",
 	// 没人会去逐条核对里面有没有自己的出口地址。命中就拦一次。
-	if me, hit, locked := selfLockoutPrefix(c, cidrs); locked {
+	if hit, locked := detectSelfLockout(c, cidrs); locked {
 		selfWarn = true
 		if !selfAck {
 			if global {
-				fail(http.StatusBadRequest, selfLockoutMsgGlobal(me, hit))
+				fail(http.StatusBadRequest, selfLockoutMsgGlobal(hit))
 			} else {
-				fail(http.StatusBadRequest, selfLockoutMsgScoped(me, hit, targetIP))
+				fail(http.StatusBadRequest, selfLockoutMsgScoped(hit, targetIP))
 			}
 			return
 		}

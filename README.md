@@ -15,6 +15,18 @@
 
 纯 Go,`CGO_ENABLED=0`,一个静态二进制,eBPF 已在里面。拷过去就能跑。
 
+## 先看一眼值不值得装
+
+一条命令,不碰你的网卡、不动数据库、不走审批流。它自己造一对 veth 冒充攻击者,
+把 XDP 挂上,凭空按下封禁,再从对端发包 —— 然后当场给你看 `iptables` 一片空白、
+内核计数器却在涨。这就是全部卖点,三十秒看完:
+
+```bash
+sudo ./xdp-ban demo          # 需要一台 Linux 与 root
+sudo ./xdp-ban demo -hold    # 跑完不拆,让你在另一个终端亲手 xdp-ban why
+```
+
+
 <div align="center">
 <img src="docs/img/dashboard.svg" width="49%"/> <img src="docs/img/bans.svg" width="49%"/>
 </div>

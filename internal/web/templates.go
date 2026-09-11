@@ -105,9 +105,9 @@ const banNewTpl = `<!doctype html><html><head><meta charset="utf-8"><title>新�
 {{if .selfWarn}}<div style="margin-top:14px;padding:10px 12px;border:1px solid #f2c2ba;border-radius:4px;background:#fbe9e7">
 <label style="display:flex;align-items:center;gap:8px;font-weight:600;color:#a3271a;margin:0">
   <input type="checkbox" name="self_ack" value="1" style="width:auto" {{if .selfAck}}checked{{end}} required>
-  我已确认会切断自己的访问,继续提交
+  我确认会切断自己、且能从别处回退,继续提交
 </label>
-<div style="color:#7a3c30;font-size:11.5px;margin-top:6px;line-height:1.5">此确认会记入审计。失联后请在物理控制台上用 <span class="mono">xdp-ban status</span> / <span class="mono">xdp-ban why &lt;ip&gt;</span> 定位 —— 这些规则不会出现在 iptables/nft/firewalld 里。</div>
+<div style="color:#7a3c30;font-size:11.5px;margin-top:6px;line-height:1.5">这条规则会切掉你此刻正用着的连接。只要你还留着另一条路(物理控制台或别的地址)就能回退:失联后用 <span class="mono">xdp-ban status</span> / <span class="mono">xdp-ban why &lt;ip&gt;</span> 定位 —— 这些规则不会出现在 iptables/nft/firewalld 里。此确认会记入审计。</div>
 </div>{{end}}
 <div style="margin-top:18px"><button class="btn primary">提交请求</button> <a class="btn" href="/bans">取消</a></div></form>
 </div></div></main></div></body></html>`

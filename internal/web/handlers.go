@@ -237,12 +237,12 @@ func (h *Handler) banCreate(c *gin.Context) {
 		return
 	}
 
-	// 保护集放行之后,再问一句"这条规则会不会把提交者自己切掉"。
+	// 保护集放行之后,再问一句"这条规则会不会切掉提交者此刻正用着的连接"。
 	// 顺序有意如此:硬保护集的否决是终局的,自封只是要一次确认,不该抢在前面。
-	if me, hit, locked := selfLockoutTarget(c, target); locked {
+	if hit, locked := selfLockoutTarget(c, target); locked {
 		selfWarn = true
 		if !selfAck {
-			fail(http.StatusBadRequest, selfLockoutMsgGlobal(me, hit))
+			fail(http.StatusBadRequest, selfLockoutMsgGlobal(hit))
 			return
 		}
 	}
